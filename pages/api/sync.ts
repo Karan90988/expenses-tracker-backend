@@ -37,9 +37,9 @@ async function upsertExpense(sql: Sql, record: SyncRecord, deviceId: string) {
     await sql`
       INSERT INTO expenses (id, amount, category_id, payment_method_id, note, date,
         is_deleted, device_id, last_synced_at, created_at, updated_at)
-      VALUES (${record.id}, ${d.amount}, ${d.category_id}, ${d.payment_method_id},
-        ${d.note ?? null}, ${d.date}, ${d.is_deleted ?? false}, ${deviceId},
-        NOW(), ${d.created_at}, ${d.updated_at})
+      VALUES (${record.id}, ${d.amount}, ${d.categoryId}, ${d.paymentMethodId},
+        ${d.note ?? null}, ${d.date}, ${d.isDeleted ?? false}, ${deviceId},
+        NOW(), ${d.createdAt}, ${d.updatedAt})
       ON CONFLICT (id) DO UPDATE SET
         amount            = EXCLUDED.amount,
         category_id       = EXCLUDED.category_id,
@@ -65,9 +65,9 @@ async function upsertCategory(sql: Sql, record: SyncRecord, deviceId: string) {
     await sql`
       INSERT INTO categories (id, name, icon, color, is_default, is_income, sort_order,
         is_deleted, device_id, last_synced_at, created_at, updated_at)
-      VALUES (${record.id}, ${d.name}, ${d.icon}, ${d.color}, ${d.is_default ?? false},
-        ${d.is_income ?? false}, ${d.sort_order ?? 0}, ${d.is_deleted ?? false},
-        ${deviceId}, NOW(), ${d.created_at}, ${d.updated_at})
+      VALUES (${record.id}, ${d.name}, ${d.icon}, ${d.color}, ${d.isDefault ?? false},
+        ${d.isIncome ?? false}, ${d.sortOrder ?? 0}, ${d.isDeleted ?? false},
+        ${deviceId}, NOW(), ${d.createdAt}, ${d.updatedAt})
       ON CONFLICT (id) DO UPDATE SET
         name       = EXCLUDED.name,
         icon       = EXCLUDED.icon,
@@ -94,9 +94,9 @@ async function upsertPaymentMethod(sql: Sql, record: SyncRecord, deviceId: strin
     await sql`
       INSERT INTO payment_methods (id, name, icon, sort_order, is_default, is_deleted,
         device_id, last_synced_at, created_at, updated_at)
-      VALUES (${record.id}, ${d.name}, ${d.icon}, ${d.sort_order ?? 0},
-        ${d.is_default ?? false}, ${d.is_deleted ?? false},
-        ${deviceId}, NOW(), ${d.created_at}, ${d.updated_at})
+      VALUES (${record.id}, ${d.name}, ${d.icon}, ${d.sortOrder ?? 0},
+        ${d.isDefault ?? false}, ${d.isDeleted ?? false},
+        ${deviceId}, NOW(), ${d.createdAt}, ${d.updatedAt})
       ON CONFLICT (id) DO UPDATE SET
         name       = EXCLUDED.name,
         icon       = EXCLUDED.icon,
@@ -122,10 +122,10 @@ async function upsertMoneyLent(sql: Sql, record: SyncRecord, deviceId: string) {
       INSERT INTO money_lent (id, person_name, amount, date_given, expected_return_date,
         status, returned_amount, returned_date, notes, is_deleted,
         device_id, last_synced_at, created_at, updated_at)
-      VALUES (${record.id}, ${d.person_name}, ${d.amount}, ${d.date_given},
-        ${d.expected_return_date ?? null}, ${d.status ?? 'pending'},
-        ${d.returned_amount ?? 0}, ${d.returned_date ?? null}, ${d.notes ?? null},
-        ${d.is_deleted ?? false}, ${deviceId}, NOW(), ${d.created_at}, ${d.updated_at})
+      VALUES (${record.id}, ${d.personName}, ${d.amount}, ${d.dateGiven},
+        ${d.expectedReturnDate ?? null}, ${d.status ?? 'pending'},
+        ${d.returnedAmount ?? 0}, ${d.returnedDate ?? null}, ${d.notes ?? null},
+        ${d.isDeleted ?? false}, ${deviceId}, NOW(), ${d.createdAt}, ${d.updatedAt})
       ON CONFLICT (id) DO UPDATE SET
         person_name           = EXCLUDED.person_name,
         amount                = EXCLUDED.amount,
