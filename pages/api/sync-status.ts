@@ -6,13 +6,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const sql = getDb();
-    const rows = await sql`
+    const [counts] = (await sql`
       SELECT
         (SELECT COUNT(*)::int FROM expenses   WHERE is_deleted = false) as expenses,
         (SELECT COUNT(*)::int FROM categories  WHERE is_deleted = false) as categories,
         (SELECT COUNT(*)::int FROM money_lent  WHERE is_deleted = false) as money_lent
-    `;
-    res.status(200).json({ status: 'ok', counts: rows[0], timestamp: new Date().toISOString() });
+    `) as Array<{ expenses: number; categories: number; money_lent: number }>;
+    res.status(200).json({ status: 'ok', counts, timestamp: new Date().toISOString() });
   } catch (err) {
     console.error('[sync-status error]', err);
     res.status(500).json({ error: 'Internal error' });
