@@ -16,10 +16,12 @@ const SyncPayloadSchema = z.object({
   deviceId: z.string().min(1),
   syncedAt: z.string(),
   tables: z.object({
-    expenses:       z.array(SyncRecordSchema).max(MAX_RECORDS),
-    categories:     z.array(SyncRecordSchema).max(MAX_REF_RECORDS),
-    paymentMethods: z.array(SyncRecordSchema).max(MAX_REF_RECORDS),
-    moneyLent:      z.array(SyncRecordSchema).max(MAX_RECORDS),
+    expenses:         z.array(SyncRecordSchema).max(MAX_RECORDS),
+    categories:       z.array(SyncRecordSchema).max(MAX_REF_RECORDS),
+    paymentMethods:   z.array(SyncRecordSchema).max(MAX_REF_RECORDS),
+    moneyLent:        z.array(SyncRecordSchema).max(MAX_RECORDS),
+    lentPeople:       z.array(SyncRecordSchema).max(MAX_RECORDS).optional(),
+    lentTransactions: z.array(SyncRecordSchema).max(MAX_RECORDS).optional(),
   }),
 });
 
@@ -143,6 +145,58 @@ async function upsertMoneyLent(sql: Sql, record: SyncRecord, deviceId: string) {
   }
 }
 
+async function upsertLentPerson(sql: Sql, record: SyncRecord, deviceId: string) {
+  const d = record.data as any;
+  if (record.operation === 'delete') {
+    await sql`
+      UPDATE lent_people SET is_deleted = true, updated_at = NOW()
+      WHERE id = ${record.id}
+    `;
+  } else {
+    await sql`
+      INSERT INTO lent_people (id, name, notes, is_deleted,
+        device_id, last_synced_at, created_at, updated_at)
+      VALUES (${record.id}, ${d.name}, ${d.notes ?? null}, ${d.isDeleted ?? false},
+        ${deviceId}, NOW(), ${d.createdAt}, ${d.updatedAt})
+      ON CONFLICT (id) DO UPDATE SET
+        name           = EXCLUDED.name,
+        notes          = EXCLUDED.notes,
+        is_deleted     = EXCLUDED.is_deleted,
+        updated_at     = EXCLUDED.updated_at,
+        last_synced_at = NOW()
+      WHERE lent_people.updated_at < EXCLUDED.updated_at
+    `;
+  }
+}
+
+async function upsertLentTransaction(sql: Sql, record: SyncRecord, deviceId: string) {
+  const d = record.data as any;
+  if (record.operation === 'delete') {
+    await sql`
+      UPDATE lent_transactions SET is_deleted = true, updated_at = NOW()
+      WHERE id = ${record.id}
+    `;
+  } else {
+    await sql`
+      INSERT INTO lent_transactions (id, person_id, type, amount, date, notes, is_deleted,
+        device_id, last_synced_at, created_at, updated_at)
+      VALUES (${record.id}, ${d.personId}, ${d.type ?? 'given'}, ${d.amount}, ${d.date},
+        ${d.notes ?? null}, ${d.isDeleted ?? false},
+        ${deviceId}, NOW(), ${d.createdAt}, ${d.updatedAt})
+      ON CONFLICT (id) DO UPDATE SET
+        person_id      = EXCLUDED.person_id,
+        type           = EXCLUDED.type,
+        amount         = EXCLUDED.amount,
+        date           = EXCLUDED.date,
+        notes          = EXCLUDED.notes,
+        is_deleted     = EXCLUDED.is_deleted,
+        updated_at     = EXCLUDED.updated_at,
+        last_synced_at = NOW()
+      WHERE lent_transactions.updated_at < EXCLUDED.updated_at
+    `;
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -165,19 +219,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { deviceId, tables } = parsed.data;
   const sql = getDb();
 
+  const lentPeople = tables.lentPeople ?? [];
+  const lentTransactions = tables.lentTransactions ?? [];
+
   try {
-    // Upsert reference tables first (categories, payment methods), then dependents
+    // Upsert parent tables first (categories, payment methods, lent people),
+    // then their dependents (expenses, money_lent, lent transactions).
     await Promise.all([
       ...tables.categories.map((r) => upsertCategory(sql, r, deviceId)),
       ...tables.paymentMethods.map((r) => upsertPaymentMethod(sql, r, deviceId)),
+      ...lentPeople.map((r) => upsertLentPerson(sql, r, deviceId)),
     ]);
 
     await Promise.all(tables.expenses.map((r) => upsertExpense(sql, r, deviceId)));
     await Promise.all(tables.moneyLent.map((r) => upsertMoneyLent(sql, r, deviceId)));
+    await Promise.all(lentTransactions.map((r) => upsertLentTransaction(sql, r, deviceId)));
 
     const totalSynced =
       tables.expenses.length + tables.categories.length +
-      tables.paymentMethods.length + tables.moneyLent.length;
+      tables.paymentMethods.length + tables.moneyLent.length +
+      lentPeople.length + lentTransactions.length;
 
     return res.status(200).json({ success: true, recordsSynced: totalSynced });
   } catch (err) {
