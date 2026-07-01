@@ -24,9 +24,9 @@ const SyncPayloadSchema = z.object({
 });
 
 type Sql = ReturnType<typeof getDb>;
-type Record = z.infer<typeof SyncRecordSchema>;
+type SyncRecord = z.infer<typeof SyncRecordSchema>;
 
-async function upsertExpense(sql: Sql, record: Record, deviceId: string) {
+async function upsertExpense(sql: Sql, record: SyncRecord, deviceId: string) {
   const d = record.data as any;
   if (record.operation === 'delete') {
     await sql`
@@ -54,7 +54,7 @@ async function upsertExpense(sql: Sql, record: Record, deviceId: string) {
   }
 }
 
-async function upsertCategory(sql: Sql, record: Record, deviceId: string) {
+async function upsertCategory(sql: Sql, record: SyncRecord, deviceId: string) {
   const d = record.data as any;
   if (record.operation === 'delete') {
     await sql`
@@ -83,7 +83,7 @@ async function upsertCategory(sql: Sql, record: Record, deviceId: string) {
   }
 }
 
-async function upsertPaymentMethod(sql: Sql, record: Record, deviceId: string) {
+async function upsertPaymentMethod(sql: Sql, record: SyncRecord, deviceId: string) {
   const d = record.data as any;
   if (record.operation === 'delete') {
     await sql`
@@ -110,7 +110,7 @@ async function upsertPaymentMethod(sql: Sql, record: Record, deviceId: string) {
   }
 }
 
-async function upsertMoneyLent(sql: Sql, record: Record, deviceId: string) {
+async function upsertMoneyLent(sql: Sql, record: SyncRecord, deviceId: string) {
   const d = record.data as any;
   if (record.operation === 'delete') {
     await sql`
