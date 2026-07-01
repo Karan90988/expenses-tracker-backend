@@ -9,23 +9,28 @@ const SyncRecordSchema = z.object({
   updatedAt: z.string(),
 });
 
+const MAX_RECORDS = 5000;
+const MAX_REF_RECORDS = 500;
+
 const SyncPayloadSchema = z.object({
   deviceId: z.string().min(1),
   syncedAt: z.string(),
   tables: z.object({
-    expenses:       z.array(SyncRecordSchema),
-    categories:     z.array(SyncRecordSchema),
-    paymentMethods: z.array(SyncRecordSchema),
-    moneyLent:      z.array(SyncRecordSchema),
-    settings:       z.array(SyncRecordSchema).optional(),
+    expenses:       z.array(SyncRecordSchema).max(MAX_RECORDS),
+    categories:     z.array(SyncRecordSchema).max(MAX_REF_RECORDS),
+    paymentMethods: z.array(SyncRecordSchema).max(MAX_REF_RECORDS),
+    moneyLent:      z.array(SyncRecordSchema).max(MAX_RECORDS),
   }),
 });
 
-async function upsertExpense(sql: ReturnType<typeof getDb>, record: z.infer<typeof SyncRecordSchema>, deviceId: string) {
+type Sql = ReturnType<typeof getDb>;
+type Record = z.infer<typeof SyncRecordSchema>;
+
+async function upsertExpense(sql: Sql, record: Record, deviceId: string) {
   const d = record.data as any;
   if (record.operation === 'delete') {
     await sql`
-      UPDATE expenses SET is_deleted = true, updated_at = ${d.updated_at}
+      UPDATE expenses SET is_deleted = true, updated_at = NOW()
       WHERE id = ${record.id}
     `;
   } else {
@@ -36,23 +41,26 @@ async function upsertExpense(sql: ReturnType<typeof getDb>, record: z.infer<type
         ${d.note ?? null}, ${d.date}, ${d.is_deleted ?? false}, ${deviceId},
         NOW(), ${d.created_at}, ${d.updated_at})
       ON CONFLICT (id) DO UPDATE SET
-        amount = EXCLUDED.amount,
-        category_id = EXCLUDED.category_id,
+        amount            = EXCLUDED.amount,
+        category_id       = EXCLUDED.category_id,
         payment_method_id = EXCLUDED.payment_method_id,
-        note = EXCLUDED.note,
-        date = EXCLUDED.date,
-        is_deleted = EXCLUDED.is_deleted,
-        updated_at = EXCLUDED.updated_at,
-        last_synced_at = NOW()
+        note              = EXCLUDED.note,
+        date              = EXCLUDED.date,
+        is_deleted        = EXCLUDED.is_deleted,
+        updated_at        = EXCLUDED.updated_at,
+        last_synced_at    = NOW()
       WHERE expenses.updated_at < EXCLUDED.updated_at
     `;
   }
 }
 
-async function upsertCategory(sql: ReturnType<typeof getDb>, record: z.infer<typeof SyncRecordSchema>, deviceId: string) {
+async function upsertCategory(sql: Sql, record: Record, deviceId: string) {
   const d = record.data as any;
   if (record.operation === 'delete') {
-    await sql`UPDATE categories SET is_deleted = true WHERE id = ${record.id}`;
+    await sql`
+      UPDATE categories SET is_deleted = true, updated_at = NOW()
+      WHERE id = ${record.id}
+    `;
   } else {
     await sql`
       INSERT INTO categories (id, name, icon, color, is_default, is_income, sort_order,
@@ -61,18 +69,27 @@ async function upsertCategory(sql: ReturnType<typeof getDb>, record: z.infer<typ
         ${d.is_income ?? false}, ${d.sort_order ?? 0}, ${d.is_deleted ?? false},
         ${deviceId}, NOW(), ${d.created_at}, ${d.updated_at})
       ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name, icon = EXCLUDED.icon, color = EXCLUDED.color,
-        is_deleted = EXCLUDED.is_deleted, updated_at = EXCLUDED.updated_at,
+        name       = EXCLUDED.name,
+        icon       = EXCLUDED.icon,
+        color      = EXCLUDED.color,
+        is_default = EXCLUDED.is_default,
+        is_income  = EXCLUDED.is_income,
+        sort_order = EXCLUDED.sort_order,
+        is_deleted = EXCLUDED.is_deleted,
+        updated_at = EXCLUDED.updated_at,
         last_synced_at = NOW()
       WHERE categories.updated_at < EXCLUDED.updated_at
     `;
   }
 }
 
-async function upsertPaymentMethod(sql: ReturnType<typeof getDb>, record: z.infer<typeof SyncRecordSchema>, deviceId: string) {
+async function upsertPaymentMethod(sql: Sql, record: Record, deviceId: string) {
   const d = record.data as any;
   if (record.operation === 'delete') {
-    await sql`UPDATE payment_methods SET is_deleted = true WHERE id = ${record.id}`;
+    await sql`
+      UPDATE payment_methods SET is_deleted = true, updated_at = NOW()
+      WHERE id = ${record.id}
+    `;
   } else {
     await sql`
       INSERT INTO payment_methods (id, name, icon, sort_order, is_default, is_deleted,
@@ -81,18 +98,25 @@ async function upsertPaymentMethod(sql: ReturnType<typeof getDb>, record: z.infe
         ${d.is_default ?? false}, ${d.is_deleted ?? false},
         ${deviceId}, NOW(), ${d.created_at}, ${d.updated_at})
       ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name, icon = EXCLUDED.icon,
-        is_deleted = EXCLUDED.is_deleted, updated_at = EXCLUDED.updated_at,
+        name       = EXCLUDED.name,
+        icon       = EXCLUDED.icon,
+        sort_order = EXCLUDED.sort_order,
+        is_default = EXCLUDED.is_default,
+        is_deleted = EXCLUDED.is_deleted,
+        updated_at = EXCLUDED.updated_at,
         last_synced_at = NOW()
       WHERE payment_methods.updated_at < EXCLUDED.updated_at
     `;
   }
 }
 
-async function upsertMoneyLent(sql: ReturnType<typeof getDb>, record: z.infer<typeof SyncRecordSchema>, deviceId: string) {
+async function upsertMoneyLent(sql: Sql, record: Record, deviceId: string) {
   const d = record.data as any;
   if (record.operation === 'delete') {
-    await sql`UPDATE money_lent SET is_deleted = true WHERE id = ${record.id}`;
+    await sql`
+      UPDATE money_lent SET is_deleted = true, updated_at = NOW()
+      WHERE id = ${record.id}
+    `;
   } else {
     await sql`
       INSERT INTO money_lent (id, person_name, amount, date_given, expected_return_date,
@@ -103,11 +127,17 @@ async function upsertMoneyLent(sql: ReturnType<typeof getDb>, record: z.infer<ty
         ${d.returned_amount ?? 0}, ${d.returned_date ?? null}, ${d.notes ?? null},
         ${d.is_deleted ?? false}, ${deviceId}, NOW(), ${d.created_at}, ${d.updated_at})
       ON CONFLICT (id) DO UPDATE SET
-        person_name = EXCLUDED.person_name, amount = EXCLUDED.amount,
-        status = EXCLUDED.status, returned_amount = EXCLUDED.returned_amount,
-        returned_date = EXCLUDED.returned_date, notes = EXCLUDED.notes,
-        is_deleted = EXCLUDED.is_deleted, updated_at = EXCLUDED.updated_at,
-        last_synced_at = NOW()
+        person_name           = EXCLUDED.person_name,
+        amount                = EXCLUDED.amount,
+        date_given            = EXCLUDED.date_given,
+        expected_return_date  = EXCLUDED.expected_return_date,
+        status                = EXCLUDED.status,
+        returned_amount       = EXCLUDED.returned_amount,
+        returned_date         = EXCLUDED.returned_date,
+        notes                 = EXCLUDED.notes,
+        is_deleted            = EXCLUDED.is_deleted,
+        updated_at            = EXCLUDED.updated_at,
+        last_synced_at        = NOW()
       WHERE money_lent.updated_at < EXCLUDED.updated_at
     `;
   }
@@ -116,6 +146,15 @@ async function upsertMoneyLent(sql: ReturnType<typeof getDb>, record: z.infer<ty
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Shared-secret auth — set SYNC_SECRET in Vercel environment variables
+  const syncSecret = process.env.SYNC_SECRET;
+  if (syncSecret) {
+    const provided = req.headers['x-sync-secret'];
+    if (provided !== syncSecret) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
   }
 
   const parsed = SyncPayloadSchema.safeParse(req.body);
@@ -127,6 +166,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const sql = getDb();
 
   try {
+    // Upsert reference tables first (categories, payment methods), then dependents
     await Promise.all([
       ...tables.categories.map((r) => upsertCategory(sql, r, deviceId)),
       ...tables.paymentMethods.map((r) => upsertPaymentMethod(sql, r, deviceId)),
@@ -140,8 +180,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       tables.paymentMethods.length + tables.moneyLent.length;
 
     return res.status(200).json({ success: true, recordsSynced: totalSynced });
-  } catch (err: any) {
+  } catch (err) {
     console.error('[sync error]', err);
-    return res.status(500).json({ error: 'Sync failed', message: err.message });
+    return res.status(500).json({ error: 'Sync failed' });
   }
 }
