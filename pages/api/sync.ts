@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { z } from 'zod';
-import { getDb } from '../lib/db';
+import { getDb } from '../../lib/db';
 
 const SyncRecordSchema = z.object({
   id: z.string(),
@@ -127,13 +127,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const sql = getDb();
 
   try {
-    // Process each table concurrently within its own group
     await Promise.all([
       ...tables.categories.map((r) => upsertCategory(sql, r, deviceId)),
       ...tables.paymentMethods.map((r) => upsertPaymentMethod(sql, r, deviceId)),
     ]);
 
-    // Expenses depend on categories and payment methods existing first
     await Promise.all(tables.expenses.map((r) => upsertExpense(sql, r, deviceId)));
     await Promise.all(tables.moneyLent.map((r) => upsertMoneyLent(sql, r, deviceId)));
 
